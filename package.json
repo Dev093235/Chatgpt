@@ -1,0 +1,16 @@
+
+{
+  "name": "rudra-song-download",
+  "version": "1.0.0",
+  "description": "YouTube audio downloader for Rudra bot",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "express": "latest",
+    "ytdl-core": "latest",
+    "yt-search": "latest",
+    "cors": "latest"
+  }
+}
