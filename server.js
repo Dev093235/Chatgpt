@@ -1,40 +1,50 @@
-
 const express = require('express');
-const cors = require('cors');
 const ytdl = require('ytdl-core');
-const ytSearch = require('yt-search');
+const yts = require('yt-search');
+const cors = require('cors');
 
 const app = express();
 const port = process.env.PORT || 3000;
 
 app.use(cors());
-app.use(express.json());
 
-app.post('/song', async (req, res) => {
-    const { query } = req.body;
-    if (!query) return res.status(400).json({ error: "Missing song query" });
+// API Endpoint: /download?song=...
+app.get('/download', async (req, res) => {
+    const songName = req.query.song;
+
+    if (!songName) {
+        return res.status(400).send('❌ Error: Missing song name in query (?song=)');
+    }
 
     try {
-        const result = await ytSearch(query);
-        if (!result.videos.length) return res.status(404).json({ error: "No results found" });
+        const searchResult = await yts(songName);
+        const video = searchResult.videos[0];
 
-        const video = result.videos[0];
-        const info = await ytdl.getInfo(video.url);
-        const format = ytdl.chooseFormat(info.formats, { quality: 'highestaudio' });
+        if (!video) return res.status(404).send('❌ Error: No matching song found.');
 
-        res.setHeader('Content-Disposition', `attachment; filename="${video.title}.mp3"`);
+        const url = video.url;
+        const title = video.title.replace(/[^\w\s]/gi, '').slice(0, 50); // Safe filename
+
+        res.setHeader('Content-Disposition', `attachment; filename="${title}.mp3"`);
         res.setHeader('Content-Type', 'audio/mpeg');
-        ytdl(video.url, { filter: 'audioonly' }).pipe(res);
+
+        // Stream audio in medium quality
+        ytdl(url, {
+            filter: 'audioonly',
+            quality: 'lowestaudio', // uses medium bitrate (≈48-64kbps), faster stream
+        }).pipe(res);
+
     } catch (err) {
         console.error(err);
-        res.status(500).json({ error: "Error downloading song" });
+        res.status(500).send('❌ Internal Server Error while downloading song.');
     }
 });
 
-app.get("/", (req, res) => {
-    res.send("🎵 Rudra Song Downloader is Live!");
+// Basic test route
+app.get('/', (req, res) => {
+    res.send('🎵 Rudra Song Downloader is Live! Use /download?song=YourSongName');
 });
 
 app.listen(port, () => {
-    console.log(`🎶 Rudra Song Downloader running on port ${port}`);
+    console.log(`✅ Rudra Song Downloader running on port ${port}`);
 });
