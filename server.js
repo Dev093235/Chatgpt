@@ -1,50 +1,53 @@
-const express = require('express');
-const ytdl = require('ytdl-core');
-const yts = require('yt-search');
-const cors = require('cors');
+import express from 'express';
+import cors from 'cors';
+import youtubedl from 'youtube-dl-exec';
 
 const app = express();
 const port = process.env.PORT || 3000;
 
 app.use(cors());
 
-// API Endpoint: /download?song=...
 app.get('/download', async (req, res) => {
-    const songName = req.query.song;
+  const videoUrl = req.query.url;
+  if (!videoUrl) {
+    return res.status(400).send('URL query param "url" is required');
+  }
 
-    if (!songName) {
-        return res.status(400).send('❌ Error: Missing song name in query (?song=)');
-    }
+  try {
+    // Streaming mp3 output from youtube-dl-exec CLI
+    const stream = youtubedl.raw(videoUrl, {
+      extractAudio: true,
+      audioFormat: 'mp3',
+      output: '-', // output to stdout
+      // Additional options:
+      // audioQuality: 0, // best audio quality
+      // quiet: true
+    });
 
-    try {
-        const searchResult = await yts(songName);
-        const video = searchResult.videos[0];
+    res.setHeader('Content-Type', 'audio/mpeg');
+    res.setHeader('Content-Disposition', 'attachment; filename="audio.mp3"');
 
-        if (!video) return res.status(404).send('❌ Error: No matching song found.');
+    stream.stdout.pipe(res);
 
-        const url = video.url;
-        const title = video.title.replace(/[^\w\s]/gi, '').slice(0, 50); // Safe filename
+    stream.stderr.on('data', (chunk) => {
+      console.error('youtube-dl stderr:', chunk.toString());
+    });
 
-        res.setHeader('Content-Disposition', `attachment; filename="${title}.mp3"`);
-        res.setHeader('Content-Type', 'audio/mpeg');
+    stream.on('close', (code) => {
+      if (code !== 0) {
+        console.error(`youtube-dl process exited with code ${code}`);
+        if (!res.headersSent) {
+          res.status(500).send('Error downloading audio');
+        }
+      }
+    });
 
-        // Stream audio in medium quality
-        ytdl(url, {
-            filter: 'audioonly',
-            quality: 'lowestaudio', // uses medium bitrate (≈48-64kbps), faster stream
-        }).pipe(res);
-
-    } catch (err) {
-        console.error(err);
-        res.status(500).send('❌ Internal Server Error while downloading song.');
-    }
-});
-
-// Basic test route
-app.get('/', (req, res) => {
-    res.send('🎵 Rudra Song Downloader is Live! Use /download?song=YourSongName');
+  } catch (error) {
+    console.error('Error:', error);
+    res.status(500).send('Server error occurred');
+  }
 });
 
 app.listen(port, () => {
-    console.log(`✅ Rudra Song Downloader running on port ${port}`);
+  console.log(`Server running at http://localhost:${port}`);
 });
